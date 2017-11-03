@@ -93,10 +93,7 @@ fn main() {
 
 		let t = TwoPointsInterval::new(lb.parse::<i32>().unwrap(), ub.parse::<i32>().unwrap(), 0i32, iw.parse::<i32>().unwrap());
 
-		let samples = sample_at_random(t, persons.len())
-				.iter()
-				.map(|&x| (((x as f64) + 0.001f64) * 100f64).floor() / 100f64)
-				.collect::<Vec<f64>>();
+		let samples = sample_at_random(t, persons.len());
 		
 		for (i, name) in persons.iter().enumerate() {
 			println!("{}: {}", name, samples.get(i).unwrap());
@@ -107,7 +104,7 @@ fn main() {
 }
 
 
-fn sample_at_random<T>(domain: TwoPointsInterval<T>, amount: usize) -> Vec<T> where T: PartialOrd + Add<Output = T> + Sub<Output = T> + Clone {
+fn sample_at_random<T, U>(domain: U, amount: usize) -> Vec<T> where T: PartialOrd + Add<Output = T> + Sub<Output = T> + Clone, U: IntoIterator<Item = T> {
 
 	let mut rng = rand::thread_rng();
 
@@ -196,15 +193,13 @@ impl<T> Iterator for TwoPointsIntervalIterator<T> where T: Add<Output = T> + Sub
 #[test]
 fn test_two_points_interval() {
 
-	let mut step = 0.5;
+	let step = 0.5;
 
 	let init_start = 1f32;
 
 	let init_end = 4f32;
 
-	let loop_cnt = ((init_end - init_start) / step) as usize;
-
-	let test_interval = TwoPointsInterval::new(init_start.clone(), 4f32, 0.0, *&step);
+	let test_interval = TwoPointsInterval::new(init_start.clone(), init_end, 0.0, *&step);
 
 	let mut v_per_step = init_start;
 
@@ -220,7 +215,7 @@ fn test_two_points_interval() {
 #[test]
 fn test_two_points_interval_counter() {
 
-	let mut step = 0.5;
+	let step = 0.5;
 
 	let init_start = 1f32;
 
@@ -232,7 +227,7 @@ fn test_two_points_interval_counter() {
 
 	let mut i = 0;
 
-	for v in test_interval {
+	for _ in test_interval {
 
 		i = i + 1;
 	}
@@ -250,12 +245,29 @@ fn test_two_points_interval_generation() {
 
 	for _ in 0..100 {
 
-		let mut sample = sample_at_random(test_interval.clone(), *&sampling_num);
+		let sample = sample_at_random(test_interval.clone(), *&sampling_num);
 
 		let mut norm = sample.iter().map(|&x| ((x + 0.001f64) * 100f64).floor()/100f64).collect::<Vec<f64>>();
 
 		norm.dedup();
 
 		assert_eq!(norm.len(), sampling_num)
+	}
+}
+
+#[test]
+fn test_two_points_interval_generation_integer() {
+
+	let test_interval = TwoPointsInterval::new(10, 100, 0, 1);
+
+	let sampling_num = 50;
+
+	for _ in 0..100 {
+
+		let mut sample = sample_at_random(test_interval.clone(), *&sampling_num);
+
+		sample.dedup();
+
+		assert_eq!(sample.len(), sampling_num);
 	}
 }

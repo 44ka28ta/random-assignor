@@ -8,12 +8,14 @@ use std::io;
 use getopts::Options;
 use std::env;
 
-fn print_usage(program: &str, opts: Options) {
+fn print_usage(program: &str, opts: &Options) -> String {
+
 	let brief = format!("Usage: {} FILE [options]", program);
-	print!("{}", opts.usage(&brief));
+
+	opts.usage(&brief)
 }
 
-fn main() {
+fn do_randomizer() -> Result<Vec<(String, String)>, String> {
 
 	let args: Vec<String> = env::args().collect();
 	let program = args[0].clone();
@@ -33,30 +35,17 @@ fn main() {
 	opts.optflag(&fp_sym, "floating-point", "Floating point mode");
 	opts.optflag(&help_sym, "help", "print this help menu");
 	
-	let matches = match opts.parse(&args[1..]) {
-		Ok(m) => { m },
-		Err(f) => { panic!(f.to_string()) }
-	};
+	let matches = try!(opts.parse(&args[1..]).map_err(|_| print_usage(&program, &opts)));
 
 	if matches.opt_present(&help_sym) {
-		print_usage(&program, opts);
-		return;
+		return Err(print_usage(&program, &opts));
 	}
 
-	let lb = match matches.opt_str(&lower_sym) {
-		Some(n) => { n },
-		None => { print_usage(&program, opts); return; }
-	};
+	let lb = try!(matches.opt_str(&lower_sym).ok_or(print_usage(&program, &opts)));
 
-	let ub = match matches.opt_str(&upper_sym) {
-		Some(n) => { n },
-		None => { print_usage(&program, opts); return; }
-	};
+	let ub = try!(matches.opt_str(&upper_sym).ok_or(print_usage(&program, &opts)));
 
-	let iw = match matches.opt_str(&width_sym) {
-		Some(n) => { n },
-		None => { print_usage(&program, opts); return; }
-	};
+	let iw = try!(matches.opt_str(&width_sym).ok_or(print_usage(&program, &opts)));
 	
 	let is_fp = matches.opt_present(&fp_sym);
 	
@@ -75,31 +64,63 @@ fn main() {
 		input.clear();
 	}
 
+	fn parse_param<T>(lb: String, ub: String, iw: String) -> Result<(T, T, T), String> where T: std::str::FromStr + PartialOrd {
+		let lb_v = try!(lb.parse::<T>().map_err(|_| "Error: Lower bound value is not number.\n".to_owned()));
+
+		let ub_v = try!(ub.parse::<T>().map_err(|_| "Error: Upper bound value is not number.\n".to_owned()));
+
+		let iw_v = try!(iw.parse::<T>().map_err(|_| "Error: Pointwise width value is not number\n".to_owned()));
+
+		if lb_v > ub_v {
+			return Err("Error: Upper bound is larger than or equal to Lower bound.".to_owned());
+		}
+
+		Ok((lb_v, ub_v, iw_v))
+	}
+
+	fn output_result<T>(persons: Vec<String>, samples: Vec<T>) -> Result<Vec<(String, String)>, String> where T: std::fmt::Display {
+
+		Ok(persons.iter().enumerate().map(|x| (x.1.to_string(), samples.get(x.0).unwrap().to_string())).collect::<Vec<(String, String)>>())
+	}
+
 	if is_fp {
 
-		let t = TwoPointsInterval::new(lb.parse::<f64>().unwrap(), ub.parse::<f64>().unwrap(), 0f64, iw.parse::<f64>().unwrap());
+		let (lb_f, ub_f, iw_f) = try!(parse_param::<f64>(lb, ub, iw).map_err(|x| format!("{}\n{}", x, print_usage(&program, &opts))));
+
+		let t = TwoPointsInterval::new(lb_f, ub_f, 0f64, iw_f);
 
 		let samples = sample_at_random(t, persons.len())
 				.iter()
 				.map(|&x| (((x as f64) + 0.001f64) * 100f64).floor() / 100f64)
 				.collect::<Vec<f64>>();
+
+		output_result(persons, samples)
 		
-		for (i, name) in persons.iter().enumerate() {
-
-			println!("{}: {}", name, samples.get(i).unwrap());
-		}
-
 	} else {
 
-		let t = TwoPointsInterval::new(lb.parse::<i32>().unwrap(), ub.parse::<i32>().unwrap(), 0i32, iw.parse::<i32>().unwrap());
+		let (lb_i, ub_i, iw_i) = try!(parse_param::<i32>(lb, ub, iw).map_err(|x| format!("{}\n{}", x, print_usage(&program, &opts))));
+
+		let t = TwoPointsInterval::new(lb_i, ub_i, 0i32, iw_i);
 
 		let samples = sample_at_random(t, persons.len());
 		
-		for (i, name) in persons.iter().enumerate() {
-			println!("{}: {}", name, samples.get(i).unwrap());
-		}
+		output_result(persons, samples)
 	}
 
+}
+
+fn main() {
+
+	match do_randomizer() {
+		Ok(k) => {
+			for (name, sample) in k {
+				println!("{}: {}", name, sample);
+			}
+		},
+		Err(e) => {
+			eprint!("{}", e);
+		},
+	}
 
 }
 
